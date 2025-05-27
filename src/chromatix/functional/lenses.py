@@ -95,15 +95,15 @@ def high_na_ff_lens(
     f: float,
     n: float,
     NA: float,
-    output_shape: tuple[int, int] | None = None,
-    output_dx: float | None = None,
+    output_shape: int | tuple[int, int] | None = None,
+    output_dx: float | tuple[float, float] | None = None,
 ) -> Field:
     """
     Applies a high NA lens placed a distance ``f`` after the incoming ``Field``.
 
     !!!warning
         This function assumes that the incoming ``Field`` contains only a single
-        wavelength and has a square shape.
+        wavelength.
 
     Args:
         field: The ``Field`` to which the lens will be applied.
@@ -132,26 +132,25 @@ def high_na_ff_lens(
 
     if output_dx is None:
         output_dx = field.dx.squeeze()
+    elif not isinstance(output_dx, (tuple, list)):
+        output_dx = (output_dx, output_dx)
 
     if output_shape is None:
         output_shape = field.spatial_shape
+    elif not isinstance(output_shape, (tuple, list)):
+        output_shape = (output_shape, output_shape)
 
     # NOTE: This only works for single wavelength so far?
-    # NOTE: What about non-square cases?
-    fov_out = output_shape[0] * output_dx
-    zoom_factor = 2 * NA * fov_out / ((field.shape[1] - 1) * field.spectrum.squeeze())
-
-    # Correction factors
-    s_grid = field.k_grid * field.spectrum.squeeze() / n
-    sz_sq = 1 - NA**2 * l2_sq_norm(s_grid)
-    sz = jnp.sqrt(jnp.maximum(sz_sq, 0.0))
-    k = 2 * jnp.pi * n / field.spectrum.squeeze()
-    defocus = jnp.where(sz != 0.0, jnp.exp(1j * k * sz * f) / sz, 0.0)
+    fov_out = tuple(o * dx for o, dx in zip(output_shape, output_dx))
+    zoom_factor = tuple(
+        2 * NA * fov / ((min(field.shape[1:3]) - 1) * field.spectrum.squeeze())
+        for fov in fov_out
+    )
 
     u = zoomed_fft(
-        x=spherical_u * defocus,
-        k_start=-zoom_factor * jnp.pi,
-        k_end=zoom_factor * jnp.pi,
+        x=spherical_u,  # * defocus,
+        k_start=tuple(-z * jnp.pi for z in zoom_factor),
+        k_end=tuple(z * jnp.pi for z in zoom_factor),
         output_shape=output_shape,
         include_end=True,
         axes=field.spatial_dims,

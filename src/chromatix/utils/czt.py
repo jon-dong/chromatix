@@ -83,8 +83,8 @@ def cztn(
 
 def zoomed_fft(
     x: ArrayLike,
-    k_start: float,
-    k_end: float,
+    k_start: Tuple[float],
+    k_end: Tuple[float],
     output_shape: Tuple[int],
     axes: Tuple[int] = (-2, -1),
     include_end: bool = True,
@@ -110,10 +110,10 @@ def zoomed_fft(
         renorm = tuple(m - 1 for m in output_shape)
     else:
         renorm = output_shape
-    w = tuple(jnp.exp(1j * (k_end - k_start) / n) for n in renorm)
-
-    a = jnp.exp(-1j * k_start)
-    a = tuple(a for _ in range(len(output_shape)))
+    w = tuple(
+        jnp.exp(1j * (k_e - k_s) / n) for n, k_e, k_s in zip(renorm, k_end, k_start)
+    )
+    a = tuple(jnp.exp(-1j * k_s) for k_s in k_start)
 
     return cztn(
         x=x,
