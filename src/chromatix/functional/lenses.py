@@ -97,6 +97,18 @@ def high_na_ff_lens(
     NA: float,
     output_shape: int | tuple[int, int] | None = None,
     output_dx: float | tuple[float, float] | None = None,
+    s_z_correction: bool = True,
+    apodization: bool = True,
+    gibson_lanni: bool = False,
+    t_s=0.1,
+    t_i=100,
+    t_i0=100,
+    t_g=150,
+    t_g0=150,
+    n_s=1.3,
+    n_i=1.5,
+    n_i0=1.5,
+    n_g=1.5,
 ) -> Field:
     """
     Applies a high NA lens placed a distance ``f`` after the incoming ``Field``.
@@ -120,6 +132,9 @@ def high_na_ff_lens(
     Returns:
         The ``Field`` propagated a distance ``f`` to and after the lens.
     """
+    if NA is not None:
+        D = 2 * f * NA / n  # Expression for NA yields width of pupil
+        field = circular_pupil(field, D)
 
     if field.shape[-1] == 1:
         # Scalar
@@ -147,8 +162,31 @@ def high_na_ff_lens(
         for fov in fov_out
     )
 
+    sin_theta2 = jnp.clip((field.grid[0] ** 2 + field.grid[1] ** 2) / f**2, 0, 1)
+    theta = jnp.arcsin(jnp.sqrt(sin_theta2))
+    if s_z_correction:
+        spherical_u /= jnp.cos(theta)
+    if apodization:
+        spherical_u *= jnp.sqrt(jnp.clip(jnp.cos(theta), 0, None))
+    if gibson_lanni:
+        clamp_value = min(n_s / n_i, n_g / n_i) ** 2
+        sin_theta2 = jnp.clip(sin_theta2, 0, clamp_value)
+        phase = (
+            2
+            * jnp.pi
+            / field.spectrum.squeeze()
+            * (
+                t_s * jnp.sqrt(n_s**2 - n_i**2 * sin_theta2)
+                + t_i * jnp.sqrt(n_i**2 - n_i**2 * sin_theta2)
+                - t_i0 * jnp.sqrt(n_i0**2 - n_i**2 * sin_theta2)
+                + t_g * jnp.sqrt(n_g**2 - n_i**2 * sin_theta2)
+                - t_g0 * jnp.sqrt(n_g**2 - n_i**2 * sin_theta2)
+            )
+        )
+        spherical_u *= jnp.exp(1j * phase)
+
     u = zoomed_fft(
-        x=spherical_u,  # * defocus,
+        x=spherical_u,
         k_start=tuple(-z * jnp.pi for z in zoom_factor),
         k_end=tuple(z * jnp.pi for z in zoom_factor),
         output_shape=output_shape,
