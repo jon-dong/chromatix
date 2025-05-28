@@ -625,17 +625,16 @@ def cartesian_to_spherical(field: Field, n: float, NA: float, f: float) -> Array
         !!! warning
             Caution: does NOT return a full Field object.
     """
-    pupil_radius = f * NA / n
-    mask = field.grid[0] ** 2 + field.grid[1] ** 2 <= pupil_radius**2
-    sin_theta2 = jnp.sum(field.grid**2, axis=0) * mask / f**2
-    cos_theta = jnp.sqrt(1 - sin_theta2)
-    sin_theta = jnp.sqrt(sin_theta2)
 
+    sin_theta2 = jnp.clip((field.grid[0] ** 2 + field.grid[1] ** 2) / f**2, 0, 1)
+    theta = jnp.arcsin(jnp.sqrt(sin_theta2))
     phi = jnp.arctan2(field.grid[0], field.grid[1])
+    cos_theta = jnp.cos(theta)
+    sin_theta = jnp.sin(theta)
     cos_phi = jnp.cos(phi)
     sin_phi = jnp.sin(phi)
-    sin_2phi = 2 * sin_phi * cos_phi
     cos_2phi = cos_phi**2 - sin_phi**2
+    sin_2phi = 2 * sin_phi * cos_phi
 
     field_x = field.u[:, :, :, :, 2][..., None]
     field_y = field.u[:, :, :, :, 1][..., None]
