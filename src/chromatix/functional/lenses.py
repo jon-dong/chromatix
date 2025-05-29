@@ -147,14 +147,14 @@ def high_na_ff_lens(
         create = VectorField.create
 
     if output_dx is None:
-        output_dx = field._dx
-    elif not isinstance(output_dx, (tuple, list)):
-        output_dx = (output_dx, output_dx)
+        output_dx = field.spectrum.squeeze() / NA / 2
+    if output_dx.ndim == 0:
+        output_dx = jnp.stack([output_dx, output_dx])
 
     if output_shape is None:
         output_shape = field.spatial_shape
-    elif not isinstance(output_shape, (tuple, list)):
-        output_shape = (output_shape, output_shape)
+    if isinstance(output_shape, int):
+        output_shape = jnp.stack([output_shape, output_shape])
 
     # NOTE: This only works for single wavelength so far?
     fov_out = tuple(o * dx for o, dx in zip(output_shape, output_dx))
@@ -162,7 +162,6 @@ def high_na_ff_lens(
         2 * NA * fov / ((min(field.shape[1:3]) - 1) * field.spectrum.squeeze())
         for fov in fov_out
     )
-    # zoom_factor = (0.99, 0.99)
 
     sin_theta2 = jnp.clip((field.grid[0] ** 2 + field.grid[1] ** 2) / f**2, 0, 1)
     theta = jnp.arcsin(jnp.sqrt(sin_theta2))
@@ -201,7 +200,12 @@ def high_na_ff_lens(
         fftshift_input=True,
     )
 
-    return create(output_dx, field._spectrum, field._spectral_density, u)
+    # Normalize the output
+    L_sq = field.spectrum * f / n
+    norm_factor = jnp.prod(field.dx, axis=0, keepdims=False) / L_sq
+    u *= norm_factor
+
+    return create(output_dx[:, None], field._spectrum, field._spectral_density, u)
 
 
 def df_lens(
