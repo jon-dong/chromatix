@@ -88,6 +88,7 @@ def zoomed_fft(
     output_shape: Tuple[int],
     axes: Tuple[int] = (-2, -1),
     include_end: bool = True,
+    fftshift_input: bool = False,
 ):
     """
     Custom FFTN function that uses the Chirp Z-transform (CZT) to compute the
@@ -115,10 +116,25 @@ def zoomed_fft(
     )
     a = tuple(jnp.exp(-1j * k_s) for k_s in k_start)
 
-    return cztn(
-        x=x,
-        m=output_shape,
-        a=a,
-        w=w,
-        axes=axes,
+    if fftshift_input:
+        kx, ky = jnp.meshgrid(
+            jnp.arange(output_shape[-2]),
+            jnp.arange(output_shape[-1]) * output_shape[-2] / output_shape[-1],
+        )
+        correction_factor = jnp.exp(
+            1j * (x.shape[-3] - 1) / 2 * (k_start[-1] - jnp.angle(w[-1]) * kx)
+            + 1j * (x.shape[-4] - 1) / 2 * (k_start[-2] - jnp.angle(w[-2]) * ky)
+        ).reshape(1, output_shape[-2], output_shape[-1], 1, 1)
+    else:
+        correction_factor = 1
+
+    return (
+        cztn(
+            x=x,
+            m=output_shape,
+            a=a,
+            w=w,
+            axes=axes,
+        )
+        * correction_factor
     )
