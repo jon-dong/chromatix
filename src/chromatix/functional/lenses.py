@@ -148,7 +148,7 @@ def high_na_ff_lens(
 
     if output_dx is None:
         output_dx = field.spectrum.squeeze() / NA / 2
-    if output_dx.ndim == 0:
+    if isinstance(output_dx, (int, float)):
         output_dx = jnp.stack([output_dx, output_dx])
 
     if output_shape is None:
